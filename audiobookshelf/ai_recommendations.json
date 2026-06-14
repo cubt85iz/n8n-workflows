@@ -1,0 +1,567 @@
+{
+  "name": "Audiobookshelf AI Recommender",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "={{ $json.baseUrl }}/api/libraries/{{ $json.libraryId }}/playlists",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {}
+      },
+      "id": "31f9dd9b-e890-43e2-9a1c-b88fa06b68d0",
+      "name": "Get Playlists List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -192,
+        64
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "zKzwDaGaFPVVItyp",
+          "name": "Audiobookshelf Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.baseUrl }}/api/libraries/{{ $json.libraryId }}/items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e350a2c6-5b32-47df-8f00-621facced8dc",
+      "name": "Get Full Library",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -192,
+        240
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "zKzwDaGaFPVVItyp",
+          "name": "Audiobookshelf Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.baseUrl }}/api/me",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -192,
+        416
+      ],
+      "id": "52458e3a-6084-45f6-b688-6ba6f8660a57",
+      "name": "Get User Details",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "zKzwDaGaFPVVItyp",
+          "name": "Audiobookshelf Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * This node replaces the logic that previously relied on 'Split Out' nodes.\n * It takes the raw response objects from the Merge node, extracts the\n * library items and the progress data, and calculates the unread books.\n */\n\nconst items = $input.all();\nlet allBooks = [];\nlet readLibraryIds = new Set();\n\n// 1. Extract data from the input items\nfor (const item of items) {\n  // Handle the Full Library response (expects a 'results' array)\n  if (Array.isArray(item.json.results)) {\n    allBooks.push(...item.json.results);\n  }\n  \n  // Handle the User Details response (expects a 'mediaProgress' array)\n  if (Array.isArray(item.json.mediaProgress)) {\n    item.json.mediaProgress.forEach(progress => {\n      if (progress.libraryItemId) {\n        readLibraryIds.add(progress.libraryItemId);\n      }\n    });\n  }\n}\n\n// 2. Safety check: If no books were found, return an empty array\nif (allBooks.length === 0) {\n  return [];\n}\n\n// 3. Filter: Keep only books whose ID is NOT in the readLibraryIds set\nconst unreadBooks = allBooks.filter(book => {\n  // We compare the book's 'id' to the progress 'libraryItemId'\n  return !readLibraryIds.has(book.id);\n});\n\n// 4. Map back to n8n item format (returning individual book objects)\nreturn unreadBooks.map(book => ({ json: book }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        320
+      ],
+      "id": "b7ec7ea0-2f1e-41e8-99e9-4503bc4bd5c2",
+      "name": "Identify Unread Books"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        0,
+        320
+      ],
+      "id": "553c41f7-7196-46a0-88d3-2f2f9f32ae5b",
+      "name": "Merge Flows for Unread Books"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        384,
+        80
+      ],
+      "id": "7d34f56e-34f4-4703-bf9f-6ab33b8c0ece",
+      "name": "Combine All Books"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+          "mode": "list",
+          "cachedResultName": "GEMMA-4-26B-A4B-IT-UD-IQ4_XS.GGUF"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Analyze the following list of books and my ratings (1-5) to understand my preferences. Identify patterns in authors, genres, themes, and ratings to determine what I enjoy most.\n\nYour task is to recommend a max of {{ $json.maxRecommendations }} unread audiobooks I am likely to enjoy, based on my perceived preferences. Unread audiobooks are items in the list that do not have a rating. The book you believe I would like the most should be listed first. Books may be part of one or more series. Books in a series have a sequence that indicates the reading order for the books. There may be books that are missing from the series. This can easily be identified if there is a gap in the sequence larger than 1.\n\nDO NOT RECOMMEND:\n\n - Books that have ratings. These are books that I have already read and do not wish to read again.\n - Books in a series unless it's the first book in the series or all previous books in any of its series have been read and there isn't a missing book that precedes it.\n\nReturn your response as a JSON object containing an array named recommendations. Each object in the array must contain only the `id` of the recommended book. Do not use code blocks or include any other fields, explanations, or text.\n\nExample:\n\n```json\n{ \"recommendations\": [ { \"id\": \"book-id-1\" }, { \"id\": \"book-id-2\" } ] }\n```\n\nBook List Data:\n{{ JSON.stringify($json.books) }}\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        80
+      ],
+      "id": "e14958f9-1c41-42de-a205-76d033851e30",
+      "name": "Audiobook Recommendation Engine",
+      "credentials": {
+        "openAiApi": {
+          "id": "UqfnTLNiF5wmq43K",
+          "name": "llama.cpp Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get configuration parameters\nconst config = $('Inject Secrets')\nconst maxRecommendations = config.first().json.recommendationCount\n\n// Helper function to parse seriesName into array of objects\nfunction parseSeries(seriesName) {\n  if (!seriesName) return [];\n\n  return seriesName\n    .split(\",\")\n    .map(s => s.trim())\n    .map(entry => {\n      // Match \"<name> #<number>\"\n      const match = entry.match(/^(.*)\\s+#(\\d+(?:\\.\\d+)?)$/)\n      if (!match) return null\n\n      return { name: match[1].trim(), sequence: Number(match[2]) }\n    })\n}\n\n// Summarize the data for the AI agent\nconst summary = $input.all().map(item => ({\n  id: item.json.id,\n  libraryId: item.json.libraryId,\n  title: item.json.media?.metadata?.title || \"\",\n  subtitle: item.json.media?.metadata?.subtitle || \"\",\n  author: item.json.media?.metadata?.authors?.map(a => a.name).join(\", \") || item.json.media?.metadata?.authorName || \"\",\n  series: parseSeries(item.json.media?.metadata?.seriesName),\n  rating: item.json.rating\n}));\n\n// Return summary as a single item containing the entire list.\nreturn [{\n  json: {\n    books: summary,\n    maxRecommendations: maxRecommendations\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        80
+      ],
+      "id": "ad0b5fa2-c1b4-4668-8b29-8afa607b734f",
+      "name": "Reduce Items for AI"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get configuration parameters\nconst config = $('Inject Secrets').first().json\nconst apiKey = config.apiKey\nconst baseUrl = config.baseUrl\nconst libraryId = config.libraryId\n\n// Identify the recommendations playlist.\nlet playlistId = null;\ntry {\n  // Access the raw results array from the first HTTP request in the playlist branch\n  const playlistsResponse = $('Get Playlists List').first().json;\n  const allPlaylists = playlistsResponse.results || [];\n\n  // Search for the specific playlist by name\n  const foundPlaylist = allPlaylists.find(item => item.name === '📖 Recommendations');\n\n  if (foundPlaylist) {\n    playlistId = foundPlaylist.id;\n  }\n} catch (e) {\n  playlistId = null;\n}\n\nconst data = $input.first().json.output[0].content[0].text;\nconst parsedData = JSON.parse(data);\nconst recommendations = parsedData.recommendations; \n\nconst playlistItems = recommendations.map(item => ({\n  libraryItemId: item.id,\n  episodeId: null\n}));\n\nreturn {\n    json: {\n      apiKey: apiKey,\n      baseUrl: baseUrl,\n      items: playlistItems,\n      libraryId: libraryId,\n      playlistId: playlistId\n    }\n  };   "
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        80
+      ],
+      "id": "64f9ca44-2511-4f0b-bff4-9582892d0e98",
+      "name": "Process Recommendations"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.baseUrl }}/api/playlists",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"items\": {{ JSON.stringify($json.items) }}, \"libraryId\": \"{{ $json.libraryId }}\", \"name\": \"📖 Recommendations\"}",
+        "options": {}
+      },
+      "id": "9e701fa3-4820-48c0-93a6-43a84be57198",
+      "name": "Create Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1392,
+        192
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "zKzwDaGaFPVVItyp",
+          "name": "Audiobookshelf Credential"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        240
+      ],
+      "id": "349ebc65-c799-451e-ac09-54c7b53e3ae7",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.baseUrl }}/api/playlists/{{ $json.playlistId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1392,
+        -48
+      ],
+      "id": "9396353f-56fc-4274-982b-aa41fa97c832",
+      "name": "Delete Recommendations",
+      "alwaysOutputData": false,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "zKzwDaGaFPVVItyp",
+          "name": "Audiobookshelf Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98e37537-4348-4b7c-ace1-5ce32ebcec9a",
+              "leftValue": "={{ $json.playlistId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1168,
+        80
+      ],
+      "id": "0c8fb05d-dfa7-46cd-bfad-8c2c6aaec3ff",
+      "name": "Playlist Exists?"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -752,
+        80
+      ],
+      "id": "0bdba233-95a6-46dc-a260-87a8a51cb4b2",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "lib_id",
+              "name": "libraryId",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "rec_count",
+              "name": "recommendationCount",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "a585b461-5c63-49e7-941b-81e11424e906",
+              "name": "baseUrl",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fa316448-24f4-4911-bf9d-ebdbfa40364e",
+      "name": "Inject Secrets",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -480,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Process Recommendations').first().json.baseUrl }}/api/playlists",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"items\": {{ JSON.stringify($('Process Recommendations').first().json.items) }}, \"libraryId\": \"{{ $('Process Recommendations').first().json.libraryId }}\", \"name\": \"📖 Recommendations\"}",
+        "options": {}
+      },
+      "id": "ed5e2430-9fc1-4bb9-ad6f-fd5dd66414a6",
+      "name": "Recreate Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1568,
+        -48
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "zKzwDaGaFPVVItyp",
+          "name": "Audiobookshelf Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the results array from the single input item\nconst playlists = $input.first().json.results || [];\nconst enrichedLibraryItems = [];\nconst STAR_EMOJI = '⭐';\n\n// Iterate through the playlists once\nfor (const playlist of playlists) {\n  const name = playlist.name || '';\n\n  // Count star emojis in the name (e.g., \"⭐⭐\" -> 2)\n  const starCount = (name.match(new RegExp(STAR_EMOJI, 'g')) || []).length;\n\n  // Verify the name is exactly the stars (prevents matching \"⭐ My Favorites\")\n  const isExactStarMatch = starCount > 0 && name === STAR_EMOJI.repeat(starCount);\n\n  if (isExactStarMatch) {\n    if (playlist.items && Array.isArray(playlist.items)) {\n      for (const entry of playlist.items) {\n        // Only include items that have valid libraryItem data\n        if (entry.libraryItem) {\n          enrichedLibraryItems.push({\n            json: {\n              ...entry.libraryItem,\n              rating: starCount\n            }\n          });\n        }\n      }\n    }\n  }\n}\n\nreturn enrichedLibraryItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        64
+      ],
+      "id": "8db4a8dd-7039-4aa3-9e9a-bed58040d97d",
+      "name": "Gather Read Books"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get Playlists List": {
+      "main": [
+        [
+          {
+            "node": "Gather Read Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Full Library": {
+      "main": [
+        [
+          {
+            "node": "Merge Flows for Unread Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Details": {
+      "main": [
+        [
+          {
+            "node": "Merge Flows for Unread Books",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Identify Unread Books": {
+      "main": [
+        [
+          {
+            "node": "Combine All Books",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Flows for Unread Books": {
+      "main": [
+        [
+          {
+            "node": "Identify Unread Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine All Books": {
+      "main": [
+        [
+          {
+            "node": "Reduce Items for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reduce Items for AI": {
+      "main": [
+        [
+          {
+            "node": "Audiobook Recommendation Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audiobook Recommendation Engine": {
+      "main": [
+        [
+          {
+            "node": "Process Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Playlist Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Inject Secrets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Playlist Exists?": {
+      "main": [
+        [
+          {
+            "node": "Delete Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Inject Secrets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inject Secrets": {
+      "main": [
+        [
+          {
+            "node": "Get Playlists List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get User Details",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Full Library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Recreate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Recommendations": {
+      "main": [
+        []
+      ]
+    },
+    "Gather Read Books": {
+      "main": [
+        [
+          {
+            "node": "Combine All Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "409483c5-e944-4c69-8fa2-998c04884f9e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2b2ba007ca196c4b6681e0cc831cad4c8f3e66f9ed0ee9ef4b7d078e530c7461"
+  },
+  "id": "FiTkB291zMmUuZ0n",
+  "tags": []
+}

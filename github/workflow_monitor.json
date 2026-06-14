@@ -1,0 +1,361 @@
+{
+  "name": "Github Workflow Monitor",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        -1216
+      ],
+      "id": "26b6d417-1237-40f0-adca-92a4c769ee4e",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "resource": "workflow",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "cubt85iz",
+          "mode": "list",
+          "cachedResultName": "cubt85iz",
+          "cachedResultUrl": "https://github.com/cubt85iz"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "automatos-cyclops",
+          "mode": "list",
+          "cachedResultName": "automatos-cyclops",
+          "cachedResultUrl": "https://github.com/cubt85iz/automatos-cyclops"
+        },
+        "workflowId": {
+          "__rl": true,
+          "value": 191161582,
+          "mode": "list",
+          "cachedResultName": "build"
+        }
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        -304,
+        -672
+      ],
+      "id": "520746b8-16f9-4fda-9542-84358c74669f",
+      "name": "Get Workflows for Repositories",
+      "webhookId": "a5901c0e-e8dd-4010-a215-85cb6c782a97",
+      "credentials": {
+        "githubApi": {
+          "id": "IMFxPQKwSSKnRYlv",
+          "name": "Workflow Monitor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9a3c849e-d6ed-4df1-b0b8-2715e072dda4",
+              "name": "repository",
+              "value": "[ \"automatos-cyclops\", \"automatos-daedalus\", \"automatos-server-auth\", \"automatos-server-base\", \"automatos-server-nnk\", \"automatos-server-pow\" ]",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -304,
+        -1104
+      ],
+      "id": "77998a35-d26d-406e-b3e8-60e57ddc4864",
+      "name": "Define Repositories"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "repository",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        -1104
+      ],
+      "id": "3794d371-267c-4643-9a4a-c86b5383802d",
+      "name": "Split Elements of Repositories Array"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        176,
+        -1104
+      ],
+      "id": "9766b42b-a549-4242-ae8b-c4df7e090986",
+      "name": "Loop Over Elements"
+    },
+    {
+      "parameters": {
+        "resource": "workflow",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "cubt85iz",
+          "mode": "list",
+          "cachedResultName": "cubt85iz",
+          "cachedResultUrl": "https://github.com/cubt85iz"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "automatos-cyclops",
+          "mode": "list",
+          "cachedResultName": "automatos-cyclops",
+          "cachedResultUrl": "https://github.com/cubt85iz/automatos-cyclops"
+        },
+        "workflowId": {
+          "__rl": true,
+          "value": 191161582,
+          "mode": "list",
+          "cachedResultName": "build"
+        }
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        176,
+        -880
+      ],
+      "id": "31b91e84-f1bf-4af5-b329-3dd8a6068582",
+      "name": "Recheck Workflow",
+      "webhookId": "a5901c0e-e8dd-4010-a215-85cb6c782a97",
+      "credentials": {
+        "githubApi": {
+          "id": "IMFxPQKwSSKnRYlv",
+          "name": "Workflow Monitor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4c17440e-fd5c-43b8-8c58-5631a28753bb",
+              "leftValue": "={{ $json.state }}",
+              "rightValue": "active",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -128,
+        -672
+      ],
+      "id": "ed228570-7831-4864-971f-4e59796c6a2e",
+      "name": "If Workflow Disabled"
+    },
+    {
+      "parameters": {
+        "resource": "workflow",
+        "operation": "enable",
+        "owner": {
+          "__rl": true,
+          "value": "cubt85iz",
+          "mode": "list",
+          "cachedResultName": "cubt85iz",
+          "cachedResultUrl": "https://github.com/cubt85iz"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "automatos-cyclops",
+          "mode": "list",
+          "cachedResultName": "automatos-cyclops",
+          "cachedResultUrl": "https://github.com/cubt85iz/automatos-cyclops"
+        },
+        "workflowId": {
+          "__rl": true,
+          "value": 191161582,
+          "mode": "list",
+          "cachedResultName": "build"
+        }
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        176,
+        -688
+      ],
+      "id": "d6b3673c-c9e1-44d7-b4d5-4337c9356029",
+      "name": "Enable Workflow",
+      "webhookId": "8c2c4fa6-dedc-4a6c-b9ca-353a9462bfb2",
+      "credentials": {
+        "githubApi": {
+          "id": "IMFxPQKwSSKnRYlv",
+          "name": "Workflow Monitor"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -656,
+        -1008
+      ],
+      "id": "ac287eaf-a84b-4e55-91c2-7970a0e95f8d",
+      "name": "Daily @ Midnight"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Define Repositories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Workflows for Repositories": {
+      "main": [
+        [
+          {
+            "node": "If Workflow Disabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Repositories": {
+      "main": [
+        [
+          {
+            "node": "Split Elements of Repositories Array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Elements of Repositories Array": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Elements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Elements": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Get Workflows for Repositories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recheck Workflow": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Elements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Workflow Disabled": {
+      "main": [
+        [
+          {
+            "node": "Enable Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Elements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enable Workflow": {
+      "main": [
+        [
+          {
+            "node": "Recheck Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily @ Midnight": {
+      "main": [
+        [
+          {
+            "node": "Define Repositories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "43d68b92-0a49-411f-9a89-aadcab085084",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2b2ba007ca196c4b6681e0cc831cad4c8f3e66f9ed0ee9ef4b7d078e530c7461"
+  },
+  "id": "4lHAvJB60F8iUhrQ",
+  "tags": []
+}
