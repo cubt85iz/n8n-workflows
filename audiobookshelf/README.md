@@ -13,6 +13,8 @@ This workflow automates the discovery of new audiobooks. Instead of relying on g
 
 The final result is a dynamically updated playlist in your Audiobookshelf instance named **"📖 Recommendations"**.
 
+![AI-generated Recommendations Playlist](image.png)
+
 ## 📋 Prerequisites
 
 To run this workflow successfully, you need:
