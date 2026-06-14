@@ -72,3 +72,50 @@ The workflow is designed as a multi-stage pipeline:
 * **State Check:** The workflow checks if a "📖 Recommendations" playlist already exists.
 * **Cleanup:** If it exists, the old playlist is deleted to prevent duplicates.
 * **Deployment:** The new recommendations are parsed and sent to the Audiobookshelf API to create the new playlist.
+
+## 🚧 Limitations
+
+### Core Limitations
+
+#### 1. Fragile & Improvised Rating System
+
+The workflow does not utilize a native rating field from Audiobookshelf. Instead, it relies on a "proxy" system via the **Gather Read Books** node.
+
+* **Emoji Dependency:** It identifies user preferences by looking for playlists named exactly with star emojis (e.g., `"⭐⭐"`).
+* **User Friction:** For the recommender to work, the user must manually curate playlists using this specific naming convention. If a user renames a playlist or uses different emojis, the AI loses all context regarding their preferences.
+* **Lack of Granularity:** Because it relies on playlist names, it is difficult to distinguish between subtle differences in preference beyond the number of stars present in a playlist name.
+
+#### 2. Single-User Architecture
+
+The workflow is designed as a personal automation tool rather than a multi-tenant service.
+
+* **Hardcoded Context:** The workflow uses the `/api/me` endpoint to fetch user details, meaning it only ever retrieves the profile and media progress of the single authenticated user.
+* **Configuration Constraints:** The `Inject Secrets` node is configured for a single `libraryId` and `baseUrl`. There is no mechanism to iterate through multiple users or handle a shared Audiobookshelf instance with multiple listeners.
+
+#### 3. Reliance on Parametric Knowledge (No RAG)
+
+The recommendation engine lacks a **Retrieval-Augmented Generation (RAG)** component, which significantly impacts accuracy.
+
+* **Model Dependency:** The "Audiobook Recommendation Engine" node passes a JSON string of book metadata directly into the prompt. The AI must rely entirely on its internal training data (parametric knowledge) to understand the relationship between the books in your library.
+* **Knowledge Gaps:** If the LLM has not been trained on specific niche titles, indie authors, or very recent releases present in your library, it will be unable to make informed connections or recognize the themes of those books.
+* **No External Context:** The workflow cannot "look up" book descriptions, reviews, or genre taxonomies from external sources (like Google Books or OpenLibrary) to bolster its decision-making.
+
+---
+
+### Technical & Scalability Limitations
+
+#### 4. Context Window & Token Limits
+
+As a user's library grows, the workflow faces a high risk of failure due to LLM token limits.
+
+* **Scaling Issues:** The `Reduce Items for AI` node aggregates the entire library summary into a single JSON object. For users with thousands of audiobooks, the resulting string will likely exceed the maximum context window of the LLM, leading to truncated data, lost information, or API errors.
+
+#### 5. Lack of Explainability
+
+The workflow is a "black box" for the end user.
+
+* **Output Format:** The AI is strictly instructed to return only a JSON array of IDs. While this is necessary for the automation to work, it means the user receives a list of recommendations in their playlist without any explanation of *why* those books were chosen (e.g., "Because you liked [Author X]...").
+
+#### 6. Error Handling & Playlist Collision
+
+* **Destructive Updates:** The workflow handles updates by deleting the existing `"📖 Recommendations"` playlist and recreating it. While this ensures the list is fresh, it can be disruptive if a user is manually interacting with that playlist or if the "Create" step fails after the "Delete" step has already executed.
